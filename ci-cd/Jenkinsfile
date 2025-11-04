@@ -1,0 +1,339 @@
+pipeline {
+    agent any
+    
+    environment {
+        AWS_REGION = 'us-east-1'
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        GCP_PROJECT = 'writing-prompt-generator'
+        AZURE_REGISTRY = 'writingpromptacr.azurecr.io'
+        DOCKER_REGISTRY = "${ECR_REGISTRY}"
+        PAGERDUTY_API_KEY = credentials('pagerduty-api-key')
+        SLACK_WEBHOOK = credentials('slack-webhook')
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                script {
+                    env.GIT_COMMIT_SHORT = sh(returnStdout: true, script: "git rev-parse --short HEAD").trim()
+                    env.BUILD_TAG = "${env.BRANCH_NAME}-${env.GIT_COMMIT_SHORT}-${env.BUILD_NUMBER}"
+                }
+            }
+        }
+        
+        stage('Code Quality') {
+            parallel {
+                stage('Linting') {
+                    steps {
+                        sh '''
+                            echo "Running ESLint for JavaScript/React code..."
+                            cd frontend && npm install && npm run lint
+                            cd ../backend && npm install && npm run lint
+                        '''
+                        
+                        sh '''
+                            echo "Running Python linting..."
+                            cd prompt-service
+                            pip install flake8 black
+                            flake8 .
+                            black --check .
+                        '''
+                    }
+                }
+                
+                stage('Security Scan') {
+                    steps {
+                        sh '''
+                            echo "Running security scan with Trivy..."
+                            trivy fs --severity HIGH,CRITICAL .
+                        '''
+                        
+                        sh '''
+                            echo "Checking for secrets..."
+                            docker run --rm -v "$PWD:/path" trufflesecurity/trufflehog:latest filesystem /path
+                        '''
+                    }
+                }
+                
+                stage('Unit Tests') {
+                    steps {
+                        sh '''
+                            echo "Running frontend tests..."
+                            cd frontend && npm test -- --coverage
+                        '''
+                        
+                        sh '''
+                            echo "Running backend tests..."
+                            cd backend && npm test
+                        '''
+                        
+                        sh '''
+                            echo "Running Python service tests..."
+                            cd prompt-service
+                            pip install pytest pytest-cov
+                            pytest --cov=. --cov-report=xml
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Build Docker Images') {
+            steps {
+                script {
+                    // Build all Docker images
+                    docker.build("${DOCKER_REGISTRY}/frontend:${BUILD_TAG}", "./frontend")
+                    docker.build("${DOCKER_REGISTRY}/backend:${BUILD_TAG}", "./backend")
+                    docker.build("${DOCKER_REGISTRY}/prompt-service:${BUILD_TAG}", "./prompt-service")
+                }
+            }
+        }
+        
+        stage('Integration Tests') {
+            steps {
+                sh '''
+                    echo "Starting services with docker-compose..."
+                    docker-compose up -d
+                    
+                    echo "Waiting for services to be ready..."
+                    sleep 30
+                    
+                    echo "Running integration tests..."
+                    npm run test:integration
+                    
+                    echo "Stopping services..."
+                    docker-compose down
+                '''
+            }
+        }
+        
+        stage('Push to Registries') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    // Push to AWS ECR
+                    sh '''
+                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                        docker push ${ECR_REGISTRY}/frontend:${BUILD_TAG}
+                        docker push ${ECR_REGISTRY}/backend:${BUILD_TAG}
+                        docker push ${ECR_REGISTRY}/prompt-service:${BUILD_TAG}
+                    '''
+                    
+                    // Tag and push to Azure Container Registry
+                    sh '''
+                        az acr login --name writingpromptacr
+                        docker tag ${ECR_REGISTRY}/frontend:${BUILD_TAG} ${AZURE_REGISTRY}/frontend:${BUILD_TAG}
+                        docker tag ${ECR_REGISTRY}/backend:${BUILD_TAG} ${AZURE_REGISTRY}/backend:${BUILD_TAG}
+                        docker push ${AZURE_REGISTRY}/frontend:${BUILD_TAG}
+                        docker push ${AZURE_REGISTRY}/backend:${BUILD_TAG}
+                    '''
+                    
+                    // Push to GCP Artifact Registry
+                    sh '''
+                        gcloud auth configure-docker ${AWS_REGION}-docker.pkg.dev
+                        docker tag ${ECR_REGISTRY}/frontend:${BUILD_TAG} ${AWS_REGION}-docker.pkg.dev/${GCP_PROJECT}/writing-prompt/frontend:${BUILD_TAG}
+                        docker push ${AWS_REGION}-docker.pkg.dev/${GCP_PROJECT}/writing-prompt/frontend:${BUILD_TAG}
+                    '''
+                }
+            }
+        }
+        
+        stage('Deploy to Staging') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    // Deploy to AWS ECS
+                    sh '''
+                        echo "Updating ECS service..."
+                        aws ecs update-service --cluster staging-cluster --service frontend-service --force-new-deployment
+                        aws ecs update-service --cluster staging-cluster --service backend-service --force-new-deployment
+                        aws ecs update-service --cluster staging-cluster --service prompt-service --force-new-deployment
+                    '''
+                    
+                    // Deploy to GKE (Google Kubernetes Engine)
+                    sh '''
+                        echo "Deploying to GKE..."
+                        gcloud container clusters get-credentials staging-cluster --zone us-central1-a
+                        kubectl set image deployment/frontend frontend=${ECR_REGISTRY}/frontend:${BUILD_TAG}
+                        kubectl set image deployment/backend backend=${ECR_REGISTRY}/backend:${BUILD_TAG}
+                        kubectl rollout status deployment/frontend
+                        kubectl rollout status deployment/backend
+                    '''
+                }
+            }
+        }
+        
+        stage('Smoke Tests') {
+            when {
+                branch 'main'
+            }
+            steps {
+                sh '''
+                    echo "Running smoke tests..."
+                    npm run test:smoke
+                '''
+            }
+        }
+        
+        stage('Performance Tests') {
+            when {
+                branch 'main'
+            }
+            steps {
+                sh '''
+                    echo "Running performance tests with K6..."
+                    k6 run ./tests/performance/load-test.js
+                '''
+            }
+        }
+        
+        stage('Deploy to Production') {
+            when {
+                branch 'main'
+            }
+            input {
+                message "Deploy to production?"
+                ok "Deploy"
+                parameters {
+                    choice(name: 'DEPLOYMENT_STRATEGY', choices: ['Blue-Green', 'Canary', 'Rolling'], description: 'Select deployment strategy')
+                }
+            }
+            steps {
+                script {
+                    if (params.DEPLOYMENT_STRATEGY == 'Blue-Green') {
+                        sh '''
+                            echo "Performing Blue-Green deployment..."
+                            ./scripts/blue-green-deploy.sh ${BUILD_TAG}
+                        '''
+                    } else if (params.DEPLOYMENT_STRATEGY == 'Canary') {
+                        sh '''
+                            echo "Performing Canary deployment..."
+                            ./scripts/canary-deploy.sh ${BUILD_TAG} 10
+                            sleep 300
+                            ./scripts/canary-deploy.sh ${BUILD_TAG} 50
+                            sleep 300
+                            ./scripts/canary-deploy.sh ${BUILD_TAG} 100
+                        '''
+                    } else {
+                        sh '''
+                            echo "Performing Rolling deployment..."
+                            kubectl set image deployment/frontend frontend=${ECR_REGISTRY}/frontend:${BUILD_TAG} --record
+                            kubectl set image deployment/backend backend=${ECR_REGISTRY}/backend:${BUILD_TAG} --record
+                            kubectl rollout status deployment/frontend
+                            kubectl rollout status deployment/backend
+                        '''
+                    }
+                    
+                    // Update CDN
+                    sh '''
+                        echo "Invalidating CloudFront cache..."
+                        aws cloudfront create-invalidation --distribution-id ${CLOUDFRONT_DIST_ID} --paths "/*"
+                        
+                        echo "Updating Azure CDN..."
+                        az cdn endpoint purge --resource-group writing-prompt-rg --profile-name cdn-profile --name frontend-endpoint --content-paths "/*"
+                    '''
+                }
+            }
+        }
+        
+        stage('Monitor Deployment') {
+            when {
+                branch 'main'
+            }
+            steps {
+                sh '''
+                    echo "Checking deployment health..."
+                    ./scripts/health-check.sh production 10 30
+                    
+                    echo "Checking Prometheus metrics..."
+                    curl -s http://prometheus.example.com/api/v1/query?query=up{job="writing-prompt"} | jq .
+                '''
+            }
+        }
+    }
+    
+    post {
+        success {
+            script {
+                // Send success notification
+                sh """
+                    curl -X POST -H 'Content-type: application/json' \
+                    --data '{"text":"✅ Build #${BUILD_NUMBER} succeeded for ${BUILD_TAG}"}' \
+                    ${SLACK_WEBHOOK}
+                """
+                
+                // Create PagerDuty change event
+                sh """
+                    curl -X POST https://api.pagerduty.com/change_events \
+                    -H 'Authorization: Token token=${PAGERDUTY_API_KEY}' \
+                    -H 'Content-Type: application/json' \
+                    -d '{
+                        "routing_key": "YOUR_ROUTING_KEY",
+                        "payload": {
+                            "summary": "Deployment successful: ${BUILD_TAG}",
+                            "source": "Jenkins",
+                            "custom_details": {
+                                "build_number": "${BUILD_NUMBER}",
+                                "branch": "${BRANCH_NAME}"
+                            }
+                        }
+                    }'
+                """
+            }
+        }
+        
+        failure {
+            script {
+                // Send failure notification
+                sh """
+                    curl -X POST -H 'Content-type: application/json' \
+                    --data '{"text":"❌ Build #${BUILD_NUMBER} failed for ${BUILD_TAG}"}' \
+                    ${SLACK_WEBHOOK}
+                """
+                
+                // Create PagerDuty incident
+                sh """
+                    curl -X POST https://events.pagerduty.com/v2/enqueue \
+                    -H 'Content-Type: application/json' \
+                    -d '{
+                        "routing_key": "YOUR_ROUTING_KEY",
+                        "event_action": "trigger",
+                        "payload": {
+                            "summary": "Build failed: ${BUILD_TAG}",
+                            "severity": "error",
+                            "source": "Jenkins",
+                            "custom_details": {
+                                "build_number": "${BUILD_NUMBER}",
+                                "branch": "${BRANCH_NAME}",
+                                "failed_stage": "${env.STAGE_NAME}"
+                            }
+                        }
+                    }'
+                """
+            }
+        }
+        
+        always {
+            // Clean up
+            cleanWs()
+            
+            // Archive artifacts
+            archiveArtifacts artifacts: '**/target/*.jar, **/coverage/**, **/test-results/**', allowEmptyArchive: true
+            
+            // Publish test results
+            junit '**/test-results/**/*.xml'
+            
+            // Publish coverage reports
+            publishHTML([
+                reportDir: 'frontend/coverage',
+                reportFiles: 'index.html',
+                reportName: 'Frontend Coverage Report'
+            ])
+        }
+    }
+}
