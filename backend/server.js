@@ -224,7 +224,7 @@ app.post('/api/prompts/generate', authenticateToken, async (req, res) => {
     }
     
     // Call Python prompt generation service
-    const promptServiceResponse = await axios.post('http://prompt-service:5000/generate', {
+    const promptServiceResponse = await axios.post('http://prompt-service:5001/generate', {
       genres,
       userId
     }, {
