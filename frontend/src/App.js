@@ -4,7 +4,7 @@ import { GoogleLogin } from '@react-oauth/google';
 import { trace } from '@opentelemetry/api';
 import GenreSelector from './components/GenreSelector';
 import PromptDisplay from './components/PromptDisplay';
-import { loginUser, logoutUser } from './store/authSlice';
+import { loginUser, logoutUser, restoreUser } from './store/authSlice';
 import { generatePrompt } from './store/promptSlice';
 import './App.css';
 
@@ -15,6 +15,22 @@ function App() {
   const { user, isAuthenticated } = useSelector((state) => state.auth);
   const { prompt, loading, error } = useSelector((state) => state.prompt);
   const [selectedGenres, setSelectedGenres] = useState([]);
+
+  // Restore user session on mount
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const userStr = localStorage.getItem('user');
+    if (token && userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        dispatch(restoreUser({ user }));
+      } catch (error) {
+        console.error('Failed to restore user:', error);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
+    }
+  }, [dispatch]);
 
   const genres = [
     'Fantasy', 'Science Fiction', 'Mystery', 'Thriller', 'Romance',
