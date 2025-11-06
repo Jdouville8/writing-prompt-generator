@@ -128,6 +128,17 @@ PROMPT_TEMPLATES = {
     ]
 }
 
+def get_random_word_count_and_difficulty():
+    """Randomly select word count and corresponding difficulty"""
+    options = [
+        (250, 'Very Easy'),
+        (500, 'Easy'),
+        (750, 'Medium'),
+        (1000, 'Hard')
+    ]
+    word_count, difficulty = random.choice(options)
+    return word_count, difficulty
+
 def generate_prompt_from_template(genres):
     """Generate a writing prompt using templates when AI is not available"""
     selected_templates = []
@@ -161,18 +172,8 @@ def generate_prompt_from_template(genres):
     for key, options in elements.items():
         prompt_text = prompt_text.replace(f'{{{key}}}', random.choice(options))
     
-    # Calculate word count suggestion based on number of genres
-    word_count = 500 * len(genres)
-    
-    # Assign difficulty
-    difficulty_levels = ['Beginner', 'Intermediate', 'Advanced']
-    if len(genres) == 1:
-        difficulty = 'Beginner'
-    elif len(genres) == 2:
-        difficulty = 'Intermediate'
-    else:
-        difficulty = 'Advanced'
-    
+    # Get random word count and difficulty
+    word_count, difficulty = get_random_word_count_and_difficulty()    
     return {
         'title': template_data['title'],
         'content': prompt_text,
@@ -217,17 +218,8 @@ def generate_prompt_with_ai(genres):
         title = lines[0].replace('Title:', '').strip() if lines else 'Untitled Prompt'
         prompt_text = '\n'.join(lines[2:]).replace('Prompt:', '').strip() if len(lines) > 2 else content
         
-        # Calculate suggested word count
-        word_count = 500 * len(genres)
-        
-        # Determine difficulty
-        if len(genres) == 1:
-            difficulty = 'Beginner'
-        elif len(genres) <= 2:
-            difficulty = 'Intermediate'
-        else:
-            difficulty = 'Advanced'
-        
+        # Get random word count and difficulty
+        word_count, difficulty = get_random_word_count_and_difficulty()        
         return {
             'title': title,
             'content': prompt_text,
