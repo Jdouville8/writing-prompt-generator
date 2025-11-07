@@ -4,8 +4,10 @@ import { GoogleLogin } from '@react-oauth/google';
 import { trace } from '@opentelemetry/api';
 import GenreSelector from './components/GenreSelector';
 import PromptDisplay from './components/PromptDisplay';
+import BookBackground from './components/BookBackground';
 import { loginUser, logoutUser, restoreUser } from './store/authSlice';
 import { generatePrompt } from './store/promptSlice';
+import { useTheme } from './contexts/ThemeContext';
 import './App.css';
 
 const tracer = trace.getTracer('frontend-app');
@@ -15,6 +17,7 @@ function App() {
   const { user, isAuthenticated } = useSelector((state) => state.auth);
   const { prompt, loading, error } = useSelector((state) => state.prompt);
   const [selectedGenres, setSelectedGenres] = useState([]);
+  const { isDarkMode, toggleTheme } = useTheme();
 
   // Restore user session on mount
   useEffect(() => {
@@ -90,18 +93,38 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100">
+    <div className={`min-h-screen transition-colors duration-200 ${isDarkMode ? 'bg-gradient-to-br from-gray-900 to-gray-800' : 'bg-gradient-to-br from-purple-50 to-indigo-100'}`}>
       {/* Header */}
-      <header className="bg-white shadow-lg">
+      <header className={`shadow-lg transition-colors duration-200 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center">
-              <h1 className="text-3xl font-bold text-gray-900">
+              <h1 className={`text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                 📚 Writing Prompt Generator
               </h1>
             </div>
-            
+
             <div className="flex items-center space-x-4">
+              {/* Dark Mode Toggle */}
+              <button
+                onClick={toggleTheme}
+                className={`p-2 rounded-lg transition-colors duration-200 ${
+                  isDarkMode
+                    ? 'bg-gray-700 hover:bg-gray-600 text-yellow-400'
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                }`}
+                aria-label="Toggle dark mode"
+              >
+                {isDarkMode ? (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                  </svg>
+                )}
+              </button>
               {!isAuthenticated ? (
                 <GoogleLogin
                   onSuccess={handleGoogleSuccess}
@@ -116,7 +139,7 @@ function App() {
                     src={user?.picture}
                     alt={user?.name}
                   />
-                  <span className="text-gray-700">{user?.name}</span>
+                  <span className={isDarkMode ? 'text-gray-200' : 'text-gray-700'}>{user?.name}</span>
                   <button
                     onClick={() => dispatch(logoutUser())}
                     className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md transition duration-200"
@@ -134,10 +157,10 @@ function App() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {!isAuthenticated ? (
           <div className="text-center py-20">
-            <h2 className="text-4xl font-bold text-gray-800 mb-4">
+            <h2 className={`text-4xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
               Welcome to Writing Prompt Generator
             </h2>
-            <p className="text-xl text-gray-600 mb-8">
+            <p className={`text-xl mb-8 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
               Sign in with Google to start generating creative writing prompts
             </p>
             <div className="flex justify-center">
@@ -153,11 +176,13 @@ function App() {
         ) : (
           <div className="space-y-8">
             {/* Genre Selection */}
-            <div className="bg-white rounded-lg shadow-xl p-8">
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">
-                Select Your Genres
-              </h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className={`relative rounded-lg shadow-xl p-8 transition-colors duration-200 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+              <BookBackground />
+              <div className="relative z-10">
+                <h2 className={`text-2xl font-bold mb-6 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                  Select Your Genres
+                </h2>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                 {genres.map((genre) => (
                   <button
                     key={genre}
@@ -165,12 +190,15 @@ function App() {
                     className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                       selectedGenres.includes(genre)
                         ? 'bg-indigo-600 text-white shadow-md transform scale-105'
+                        : isDarkMode
+                        ? 'bg-gray-700 text-gray-200 hover:bg-gray-600'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
                     {genre}
                   </button>
                 ))}
+                </div>
               </div>
             </div>
 
@@ -229,13 +257,13 @@ function App() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-800 text-white mt-20">
+      <footer className={`mt-20 transition-colors duration-200 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-800'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center">
-            <p className="text-gray-300">
+            <p className={isDarkMode ? 'text-gray-400' : 'text-gray-300'}>
               Built with React, Node.js, Python, and ❤️
             </p>
-            <p className="text-gray-400 mt-2 text-sm">
+            <p className={`mt-2 text-sm ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
               Powered by AWS, GCP, Azure | Monitored with Prometheus & OpenTelemetry
             </p>
           </div>
