@@ -558,6 +558,37 @@ def generate_sound_design_prompt(synthesizer, exercise_type):
         'The Stars My Destination', 'The Caves of Steel', 'Extremity', 'Katabasis'
     ]
 
+    # Artist tracking for even distribution (technical exercises only)
+    all_artists = [
+        # Original artists
+        'Tipper', 'Space Laces', 'Virtual Riot', 'Resonant Language', 'Culprate', 'Chris Lorenzo',
+        'Skrillex', 'Tchami', 'Simula', 'Monty', 'Alix Perez', 'Eprom', 'G Jones',
+        'Koan Sound', 'Kursa', 'Seppa', 'Vorso', 'Flying Lotus', 'Chee', 'Tsuruda', 'Mr. Carmack',
+        'Noisia', 'Sleepnet', 'Broken Note', 'Clockvice', 'Ihatemodels', 'Sara Landry',
+        'Must Die!', 'Eptic', 'Charlesthefirst', 'Esseks', 'Tiedye Ky', 'Lab Group', 'Supertask', 'Detox Unit', 'Mr. Bill',
+        # Dubstep
+        'Excision', 'Zeds Dead', 'Flux Pavilion', 'Subtronics', 'Knife Party', 'Kompany', 'Zomboy', 'Rusko',
+        'Borgore', 'Downlink', 'Noisestorm', 'Spag Heddy', 'Kayzo', 'Kode9', 'Kill the Noise', 'Kahn', 'Liquid Stranger', 'Truth',
+        # Glitch Hop / Halftime
+        'The Glitch Mob', 'Opiuo', 'Gramatik', 'Haywyre', 'CloZee', 'The Polish Ambassador', 'Beats Antique',
+        'Random Rab', 'Glacier', 'Echo Map', 'Complexive', 'rabidZen', 'Two Fingers', 'Hudson Mohawke', 'Juno What', 'ill.Gates', 'Paper Tiger',
+        # Drum and Bass
+        'Goldie', 'LTJ Bukem', 'Andy C', 'Roni Size', 'Chase & Status', 'Sub Focus', 'Netsky', 'High Contrast', 'Pendulum', 'Dimension',
+        'Hedex', 'Irah', 'Trigga', 'Bou', 'K-Motionz', 'DJ Fresh', 'Black Sun Empire', 'Calibre', 'Phantasm', 'Metrik',
+        # Experimental Bass
+        'Of The Trees', 'Mersiv', 'Khiva', 'Templo', 'Risik', 'Seven Orbits', 'Abstrakt Sonance',
+        'Duke & Jones', 'Cozway', 'Jeanie', 'Razat', 'Roxas & Klahrk', 'Toadface', 'Sapped', 'Tsimba', 'DMVU', 'SLAVE',
+        # House
+        'Daft Punk', 'Larry Heard', 'Masters At Work', 'Derrick Carter', 'DJ Sneak', 'FISHER', 'John Summit', 'Joel Corry', 'Bob Sinclar', 'CID',
+        'BLOND:ISH', 'Noizu', 'Dom Dolla', 'Malaa', 'Wax Motif', 'Kaskade', 'Marten Hørger', 'Afrojack', 'Tiësto', 'Black Coffee',
+        # Psytrance
+        'Astrix', 'Vini Vici', 'Infected Mushroom', 'Liquid Soul', 'GMS', 'Ace Ventura', 'Hallucinogen', 'Electric Universe', 'Zen Mechanics', 'Avalon',
+        'Indira Paganotto', 'Phaxe', 'Morten Granau', 'Killerwatts', 'Outsiders', 'X-Noize', 'Blastoyz', 'Relativ', 'Faders', 'Tristan',
+        # Hard Techno
+        'Charlotte De Witte', 'Kobosil', 'Rephate', 'WNDRLST', 'In Verruf', 'Madwoman', 'Nicolas Julian', 'Helena Hauff', 'Alignment', 'Kozlov',
+        'Victor Ruiz', 'Layton Giordani', 'Bart Skils', 'Sven Väth', 'Paul Kalkbrenner', 'Stephan Bodzin', 'Peggy Gou', 'HI-LO', 'Space 92', 'Eli Brown'
+    ]
+
     if not USE_AI:
         # Fallback templates for sound design
         if exercise_type == 'technical':
@@ -681,27 +712,46 @@ def generate_sound_design_prompt(synthesizer, exercise_type):
         synth_info = synth_context.get(synthesizer, synth_context['Serum 2'])
 
         if exercise_type == 'technical':
+            # Get next artist from rotation to ensure even distribution
+            try:
+                # Get the current artist index from Redis
+                artist_index_key = 'sound_design:artist_rotation_index'
+                current_index = redis_client.get(artist_index_key)
+
+                if current_index is None:
+                    current_index = 0
+                else:
+                    current_index = int(current_index)
+
+                # Get the next artist
+                selected_artist = all_artists[current_index % len(all_artists)]
+
+                # Increment the index for next time
+                redis_client.set(artist_index_key, (current_index + 1) % len(all_artists))
+
+            except Exception as e:
+                logger.error(f"Error with artist rotation: {str(e)}")
+                # Fallback to random selection
+                selected_artist = random.choice(all_artists)
+
             system_prompt = f"""You are an expert sound designer and educator specializing in {synthesizer}.
 {synthesizer} is a {synth_info['type']} synthesizer with {synth_info['features']}.
 It excels at {synth_info['strengths']}.
 
-Generate a technical sound design exercise based on the signature sounds of these artists:
-- Tipper, Space Laces, Virtual Riot, Resonant Language, Culprate, Chris Lorenzo
-- Skrillex, Tchami, Simula, Monty, Alix Perez, Eprom, G Jones
-- Koan Sound, Kursa, Seppa, Vorso, Flying Lotus, Chee, Tsuruda, Mr. Carmack
-- Noisia, Sleepnet, Broken Note, Clockvice, Ihatemodels, Sara Landry
-- Must Die!, Eptic, Charlesthefirst, Esseks, Tiedye Ky, Lab Group, Supertask, Detox Unit, Mr. Bill
+IMPORTANT: You MUST base this exercise on the artist "{selected_artist}". Create a technical exercise that teaches their signature sound design techniques.
+
+Available artists for context (but focus on {selected_artist}): All genres from Dubstep, Glitch Hop, Drum and Bass, Experimental Bass, House, Psytrance, and Hard Techno including artists like Skrillex, Virtual Riot, Noisia, KOAN Sound, Alix Perez, Daft Punk, Infected Mushroom, Charlotte De Witte, and many more.
 
 The exercise should:
-1. Reference a specific artist's signature sound style
+1. Reference {selected_artist}'s specific signature sound style
 2. Provide step-by-step technical guidance using {synthesizer}'s specific features
 3. Detail synthesis parameters (oscillators, filters, modulation, effects)
-4. Include tips for achieving that artist's characteristic production techniques
+4. Include tips for achieving {selected_artist}'s characteristic production techniques
 
 Keep instructions clear and actionable, referencing {synthesizer}'s actual interface elements.
 Examples: "Create a Skrillex-style metallic bass", "Design a Tipper surgical bass", "Build a Virtual Riot supersized growl"."""
 
-            user_prompt = "Create a technical sound design exercise based on one of these artists' signature sounds, with step-by-step synthesis instructions."
+            user_prompt = f"Create a technical sound design exercise based on {selected_artist}'s signature sounds, with step-by-step synthesis instructions specific to their production style."
 
         else:  # creative/abstract
             # Get next book from rotation to ensure even distribution
