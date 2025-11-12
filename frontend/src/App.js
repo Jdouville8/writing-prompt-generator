@@ -405,7 +405,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center">
             <p className={isDarkMode ? 'text-gray-400' : 'text-gray-300'}>
-              Built with React, Node.js, Python, and ❤️
+              Built with React, Node.js & Python
             </p>
             <p className={`mt-2 text-sm ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
               Powered by AWS, GCP, Azure | Monitored with Prometheus & OpenTelemetry
