@@ -540,6 +540,24 @@ def generate_sound_design_prompt(synthesizer, exercise_type):
         }
     }
 
+    # Book tracking for even distribution (creative/abstract exercises only)
+    all_books = [
+        'Red Rising', 'The Left Hand of Darkness', "Ender's Game", 'Station Eleven', 'The Peripheral',
+        'Neuromancer', 'The Goldfinch', "The Hitchhiker's Guide", 'The Kite Runner', 'Borne',
+        'Dark Matter', 'The Illustrated Man', 'Recursion', 'The City & the City', 'Mistborn',
+        'A Memory Called Empire', 'The Three-Body Problem', 'Fahrenheit 451', 'The Nightingale',
+        'The House in the Cerulean Sea', 'Dune', 'Annihilation', 'Upgrade', 'Wayward Pines',
+        'The Martian', 'Cloud Atlas', 'The Woman in White', 'Foundation', 'Snow Crash',
+        'The Long Way to a Small, Angry Planet', 'Frankenstein', 'American Gods', '1984',
+        'The Hunger Games', 'Nexus', 'The Mountain in the Sea', 'Scythe', 'Watchmen', 'Dorohedoro',
+        "Howl's Moving Castle", 'Eragon', 'The Girl on the Train', 'The Silkworm', 'The Night Fire',
+        'Lock In', 'The Night Manager', 'The Van Apfel Girls Are Gone', 'The Lord of the Rings',
+        'A Song of Ice and Fire', 'The Name of the Wind', 'Elantris', 'The Way of Kings',
+        'The Once and Future King', 'The Chronicles of Narnia', 'The Wheel of Time', 'The Hobbit',
+        'The Time Machine', 'The Invisible Man', 'Dracula', 'Brave New World', 'The Hollow Crown',
+        'The Stars My Destination', 'The Caves of Steel', 'Extremity', 'Katabasis'
+    ]
+
     if not USE_AI:
         # Fallback templates for sound design
         if exercise_type == 'technical':
@@ -686,11 +704,35 @@ Examples: "Create a Skrillex-style metallic bass", "Design a Tipper surgical bas
             user_prompt = "Create a technical sound design exercise based on one of these artists' signature sounds, with step-by-step synthesis instructions."
 
         else:  # creative/abstract
+            # Get next book from rotation to ensure even distribution
+            try:
+                # Get the current book index from Redis
+                book_index_key = 'sound_design:book_rotation_index'
+                current_index = redis_client.get(book_index_key)
+
+                if current_index is None:
+                    current_index = 0
+                else:
+                    current_index = int(current_index)
+
+                # Get the next book
+                selected_book = all_books[current_index % len(all_books)]
+
+                # Increment the index for next time
+                redis_client.set(book_index_key, (current_index + 1) % len(all_books))
+
+            except Exception as e:
+                logger.error(f"Error with book rotation: {str(e)}")
+                # Fallback to random selection
+                selected_book = random.choice(all_books)
+
             system_prompt = f"""You are a creative companion for sound design. Create exercises for {synthesizer} that draw inspiration from literature—pulling in vivid imagery, emotional textures, and conceptual depth from novels.
 
 {synthesizer} is a {synth_info['type']} synthesizer with {synth_info['features']}.
 
-Draw inspiration from books like: Neuromancer, Dune, The Left Hand of Darkness, Station Eleven, The Three-Body Problem, Red Rising, Mistborn, The City & the City, 1984, Fahrenheit 451, Cloud Atlas, American Gods, Snow Crash, The Peripheral, Foundation, Ender's Game, The Kite Runner, The Goldfinch, Frankenstein, The Hunger Games, The Woman in White, Borne, Annihilation, Dark Matter, Upgrade, Recursion, Wayward Pines, Nexus, The Illustrated Man, The Mountain in the Sea, Scythe, The Martian, Watchmen, Dorohedoro, Howl's Moving Castle, Eragon, and similar literary works.
+IMPORTANT: You MUST base this exercise on the book "{selected_book}". Reference specific concepts, imagery, or moments from this book.
+
+Available books for reference (but use {selected_book} for this exercise): Neuromancer, Dune, The Left Hand of Darkness, Station Eleven, The Three-Body Problem, Red Rising, Mistborn, The City & the City, 1984, Fahrenheit 451, Cloud Atlas, American Gods, Snow Crash, The Peripheral, Foundation, Ender's Game, The Kite Runner, The Goldfinch, Frankenstein, The Hunger Games, The Woman in White, Borne, Annihilation, Dark Matter, Upgrade, Recursion, Wayward Pines, Nexus, The Illustrated Man, The Mountain in the Sea, Scythe, The Martian, Watchmen, Dorohedoro, Howl's Moving Castle, Eragon.
 
 Exercise Types (choose one):
 - **Translation**: Translating literary imagery or concepts into sound (the ansible, psychohistory, allomancy, etc.)
@@ -714,7 +756,7 @@ IMPORTANT:
 - Suggest varied time frames: "5 minutes," "until it aches," "work until it cuts," "stop when time breaks"
 - Let the exercise feel like play, not work"""
 
-            user_prompt = "Create a creative/abstract sound design exercise inspired by a specific moment, concept, or imagery from literature. Make it evocative and strange, not generic. Reference the book by name."
+            user_prompt = f"Create a creative/abstract sound design exercise inspired by a specific moment, concept, or imagery from {selected_book}. Make it evocative and strange, not generic. You MUST reference {selected_book} by name in your exercise."
 
         try:
             response = openai.ChatCompletion.create(
