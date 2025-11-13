@@ -514,7 +514,7 @@ function App() {
               <>
                 <div className={`mb-8 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6`}>
                   <h2 className={`text-2xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                    Generate Emotional Chord Progression
+                    Generate Emotion Driven Chord Progressions
                   </h2>
                   <p className={`mb-6 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                     Select 1 or 2 emotions to generate a chord progression with explanation of the selection and downloadable MIDI file.
