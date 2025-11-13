@@ -214,21 +214,34 @@ def sanitize_ai_content(content):
     # Check for semantic corruption patterns (word salad, incoherent text)
     # Look for lines with excessive capitalized words in sequence (likely corruption)
     for line in content.split('\n'):
+        # Skip title lines and headers - they naturally have capitalized words
+        if line.strip().startswith(('Title:', 'Step', '##', '#', '**', '-')):
+            continue
+
         words = line.split()
-        if len(words) > 10:
+        if len(words) > 15:  # Only check longer lines
             # Count consecutive capitalized words (excluding proper sentence starts)
             cap_sequences = []
             current_seq = 0
             for i, word in enumerate(words):
-                # Skip first word of sentence
-                if i > 0 and word[0].isupper() and len(word) > 1:
-                    current_seq += 1
+                # Skip first word of sentence and common capitalized terms
+                clean_word = word.strip('.,;:!?()[]')
+                if i > 0 and len(clean_word) > 1 and clean_word[0].isupper():
+                    # Skip if it looks like a known proper noun pattern (artist/synth names)
+                    if not any(keyword in clean_word for keyword in ['Serum', 'Phase', 'Plant', 'Vital', 'FM', 'LFO']):
+                        current_seq += 1
+                    else:
+                        current_seq = 0
                 else:
-                    if current_seq >= 5:  # 5+ consecutive capitalized words is suspicious
+                    if current_seq >= 8:  # 8+ consecutive capitalized words is very suspicious
                         cap_sequences.append(current_seq)
                     current_seq = 0
 
-            if cap_sequences and max(cap_sequences) >= 5:
+            # Check the final sequence
+            if current_seq >= 8:
+                cap_sequences.append(current_seq)
+
+            if cap_sequences and max(cap_sequences) >= 8:
                 logger.warning(f"[SANITIZE] Detected suspicious capitalization pattern (word salad): {line[:100]}")
                 return None
 
@@ -838,24 +851,48 @@ def generate_sound_design_prompt(synthesizer, exercise_type, genre="all"):
                 redis_key = f'sound_design:artist_rotation_index:{backend_genre}'
 
             logger.info(f"[GENRE DEBUG] Redis key: {redis_key}")
-            
+
             try:
-                # Get the current artist index from Redis for this genre
-                current_index = redis_client.get(redis_key)
+                # Get the shuffled artist order and current position from Redis
+                shuffled_key = f'{redis_key}:shuffled'
+                position_key = f'{redis_key}:position'
 
-                if current_index is None:
-                    current_index = 0
+                # Get current shuffled order
+                shuffled_indices = redis_client.get(shuffled_key)
+
+                if shuffled_indices is None:
+                    # First time for this genre - create a shuffled list of indices
+                    indices = list(range(len(artist_pool)))
+                    random.shuffle(indices)
+                    redis_client.set(shuffled_key, json.dumps(indices))
+                    redis_client.set(position_key, 0)
+                    shuffled_indices = indices
+                    current_position = 0
+                    logger.info(f"[GENRE DEBUG] Created new shuffled order for {backend_genre}")
                 else:
-                    current_index = int(current_index)
+                    # Parse the shuffled order from JSON
+                    shuffled_indices = json.loads(shuffled_indices)
+                    current_position = int(redis_client.get(position_key) or 0)
 
-                logger.info(f"[GENRE DEBUG] Current index from Redis: {current_index}")
+                    # If we've gone through all artists, reshuffle for next cycle
+                    if current_position >= len(shuffled_indices):
+                        indices = list(range(len(artist_pool)))
+                        random.shuffle(indices)
+                        redis_client.set(shuffled_key, json.dumps(indices))
+                        redis_client.set(position_key, 0)
+                        shuffled_indices = indices
+                        current_position = 0
+                        logger.info(f"[GENRE DEBUG] Reshuffled artist order for {backend_genre}")
 
-                # Get the next artist from the filtered pool
-                selected_artist = artist_pool[current_index % len(artist_pool)]
-                logger.info(f"[GENRE DEBUG] Selected artist: {selected_artist}")
+                logger.info(f"[GENRE DEBUG] Current position in shuffled list: {current_position}")
 
-                # Increment the index for next time
-                redis_client.set(redis_key, (current_index + 1) % len(artist_pool))
+                # Get the artist at the current shuffled position
+                artist_index = shuffled_indices[current_position]
+                selected_artist = artist_pool[artist_index]
+                logger.info(f"[GENRE DEBUG] Selected artist: {selected_artist} (index {artist_index})")
+
+                # Increment position for next time
+                redis_client.set(position_key, current_position + 1)
 
             except Exception as e:
                 logger.error(f"Error with artist rotation: {str(e)}")
