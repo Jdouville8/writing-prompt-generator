@@ -630,8 +630,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 If you encounter issues or have questions:
 
 1. Check the [Troubleshooting](#-troubleshooting) section
-2. Search [existing issues](https://github.com/YOUR_USERNAME/ideasthesia-creative-prompt-generator/issues)
-3. [Open a new issue](https://github.com/YOUR_USERNAME/ideasthesia-creative-prompt-generator/issues/new) with:
+3. [Open a new issue](https://github.com/jdouville8/ideasthesia-creative-prompt-generator/issues/new) with:
    - Detailed description of the problem
    - Steps to reproduce
    - Relevant logs (`docker-compose logs`)
@@ -644,17 +643,13 @@ If you encounter issues or have questions:
 ### Planned Features
 
 - [ ] User prompt history and favorites
-- [ ] Community sharing of generated exercises
-- [ ] More synthesizers (Omnisphere, Massive X, Phaseplant)
+- [ ] More synthesizers (Operator, Massive X, Arturia Pigments)
 - [ ] Scale and mode suggestions for chord progressions
 - [ ] Audio examples for sound design exercises
 - [ ] Mobile-responsive design improvements
 - [ ] Export chord progressions as PDF sheet music
-- [ ] Collaborative writing sessions
 - [ ] Progress tracking and analytics
 
 ---
 
-**Built with ❤️ for creatives, by creatives**
-
-*Ideasthesia (noun): A neurological phenomenon in which stimulation of one sense involuntarily triggers experiences in another sense. The perfect name for a tool that bridges writing, music, and emotion.*
+*Ideasthesia (noun): A neurological phenomenon in which stimulation of one sense involuntarily triggers experiences in another sense.*
