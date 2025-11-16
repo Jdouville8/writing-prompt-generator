@@ -39,6 +39,95 @@ const PromptDisplay = ({ prompt, genres }) => {
     });
   };
 
+  // Render markdown-formatted feedback
+  const renderFeedback = (text) => {
+    if (!text) return null;
+
+    const lines = text.split('\n');
+    const elements = [];
+
+    lines.forEach((line, index) => {
+      const trimmedLine = line.trim();
+
+      // Empty lines
+      if (trimmedLine === '') {
+        elements.push(<div key={`space-${index}`} className="h-3"></div>);
+        return;
+      }
+
+      // H3 headings (###)
+      if (trimmedLine.startsWith('###')) {
+        const headingText = trimmedLine.replace(/^###\s*/, '');
+        const parsedHeading = parseInlineMarkdown(headingText);
+        elements.push(
+          <h3 key={index} className={`text-lg font-bold mt-4 mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            {parsedHeading}
+          </h3>
+        );
+        return;
+      }
+
+      // H4 headings (####)
+      if (trimmedLine.startsWith('####')) {
+        const headingText = trimmedLine.replace(/^####\s*/, '');
+        const parsedHeading = parseInlineMarkdown(headingText);
+        elements.push(
+          <h4 key={index} className={`text-base font-semibold mt-3 mb-1 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+            {parsedHeading}
+          </h4>
+        );
+        return;
+      }
+
+      // Bulleted lists
+      if (trimmedLine.startsWith('-') || trimmedLine.startsWith('•')) {
+        const bulletText = trimmedLine.replace(/^[-•]\s*/, '');
+        const parsedBullet = parseInlineMarkdown(bulletText);
+        elements.push(
+          <div key={index} className="flex items-start ml-4 mb-1">
+            <span className={`mr-2 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-600'}`}>•</span>
+            <span className={isDarkMode ? 'text-gray-200' : 'text-gray-800'}>{parsedBullet}</span>
+          </div>
+        );
+        return;
+      }
+
+      // Numbered lists
+      if (trimmedLine.match(/^\d+\./)) {
+        const parsedLine = parseInlineMarkdown(trimmedLine);
+        elements.push(
+          <div key={index} className={`ml-4 mb-1 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+            {parsedLine}
+          </div>
+        );
+        return;
+      }
+
+      // Regular paragraphs
+      const parsedLine = parseInlineMarkdown(line);
+      elements.push(
+        <p key={index} className={`mb-2 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+          {parsedLine}
+        </p>
+      );
+    });
+
+    return elements;
+  };
+
+  // Parse inline markdown (bold)
+  const parseInlineMarkdown = (text) => {
+    if (!text) return null;
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        const boldText = part.slice(2, -2);
+        return <strong key={index} className={`font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{boldText}</strong>;
+      }
+      return <span key={index}>{part}</span>;
+    });
+  };
+
   const renderContent = () => {
     if (!prompt.content) return null;
     const lines = prompt.content.split('\n');
@@ -261,8 +350,8 @@ const PromptDisplay = ({ prompt, genres }) => {
             <h4 className={`text-xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
               ✨ AI Feedback
             </h4>
-            <div className={`leading-relaxed whitespace-pre-wrap ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-              {feedback}
+            <div className="leading-relaxed">
+              {renderFeedback(feedback)}
             </div>
           </div>
         )}

@@ -2052,6 +2052,145 @@ Keep writing and developing your craft!"""
             logger.error(f"Writing feedback generation failed: {str(e)}")
             return jsonify({'error': 'Failed to generate writing feedback'}), 500
 
+@app.route('/generate-drawing-feedback', methods=['POST'])
+def generate_drawing_feedback_endpoint():
+    """Generate AI feedback for a drawing submission with image analysis"""
+    with tracer.start_as_current_span("generate-drawing-feedback") as span:
+        try:
+            data = request.json
+            image_data = data.get('image', '')
+            exercise = data.get('exercise', '')
+            skills = data.get('skills', [])
+            difficulty = data.get('difficulty', '')
+
+            span.set_attribute("skills", str(skills))
+            span.set_attribute("difficulty", difficulty)
+            span.set_attribute("has_image", bool(image_data))
+
+            # Validate inputs
+            if not image_data or not skills:
+                return jsonify({'error': 'Missing required fields'}), 400
+
+            # Generate feedback using OpenAI Vision API
+            if USE_AI:
+                try:
+                    span.add_event("generating-ai-vision-feedback")
+
+                    # Image data should be in base64 format
+                    # If it includes data URL prefix, keep it for the API
+                    image_url = image_data if image_data.startswith('data:image') else f"data:image/jpeg;base64,{image_data}"
+
+                    user_prompt = f"""You are an experienced art instructor providing direct, one-on-one feedback on student drawings. Address the artist as "you" throughout.
+
+The artist completed this exercise:
+{exercise}
+
+Target Skills: {', '.join(skills)}
+Difficulty: {difficulty}
+
+Analyze the submitted drawing and provide critical but encouraging feedback:
+
+1. **First Impressions**: What immediately stands out about this drawing? Be honest about the overall quality and execution level.
+
+2. **Skill Assessment** - For each target skill ({', '.join(skills)}):
+   - What did they do well with this skill?
+   - What specific problems do you see?
+   - Give concrete observations from the image (e.g., "the proportions of the left arm are too long compared to the torso")
+
+3. **Technical Issues**: Identify 2-3 specific technical problems:
+   - Line quality, control, or confidence
+   - Proportional relationships
+   - Form construction
+   - Light/shadow handling
+   - Composition choices
+   Be specific about WHERE you see these issues in the drawing.
+
+4. **What's Working**: Point out 1-2 genuine strengths. Be specific - reference actual parts of the drawing. If the work is weak overall, find small bright spots but be honest.
+
+5. **Priority Fixes**: What are the 1-2 most important things to practice or fix? Be direct about what will make the biggest improvement.
+
+APPROACH:
+- Address them as "you" - this is direct feedback
+- Be honest about weaknesses, support with visual evidence
+- Reference specific parts of their drawing
+- Use drawing terminology appropriately for their level
+- End with genuine encouragement IF they focus on the feedback"""
+
+                    # Use GPT-4 Vision API (gpt-4o has vision capabilities)
+                    response = openai.ChatCompletion.create(
+                        model="gpt-4o",
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": user_prompt
+                                    },
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": image_url,
+                                            "detail": "high"
+                                        }
+                                    }
+                                ]
+                            }
+                        ],
+                        max_tokens=800,
+                        temperature=0.7
+                    )
+
+                    feedback = response.choices[0].message.content.strip()
+
+                    span.set_attribute("feedback.length", len(feedback))
+                    span.set_attribute("model", "gpt-4o")
+                    return jsonify({'feedback': feedback}), 200
+
+                except Exception as ai_error:
+                    logger.error(f"AI vision feedback failed: {str(ai_error)}")
+                    logger.error(f"Error details: {type(ai_error).__name__}: {str(ai_error)}")
+                    logger.warning("Falling back to template feedback for drawing")
+                    # Fall through to template feedback
+
+            # Template fallback feedback
+            logger.info("Using template feedback for drawing (AI not available or failed)")
+            skill_string = ' and '.join(skills)
+            template_feedback = f"""**Feedback on Your Drawing Exercise**
+
+Thank you for submitting your work! Here's feedback on your {skill_string} practice:
+
+**Overall Impression:**
+You've completed the exercise and made an effort to engage with {skill_string}. This shows commitment to practicing these fundamental skills.
+
+**Skill Development - {skill_string}:**
+• Your drawing demonstrates engagement with the exercise requirements
+• Continue focusing on the specific aspects of {skill_string} outlined in the exercise
+• Practice makes progress - the more you work on these skills, the more natural they'll become
+
+**Technical Observations:**
+• Keep working on confident mark-making and line control
+• Pay attention to the fundamental relationships and structures
+• Review the exercise tips for specific guidance on {skill_string}
+
+**Next Steps:**
+• Repeat this exercise multiple times to build muscle memory
+• Study examples that demonstrate strong {skill_string}
+• Focus on deliberate practice of the specific skill components
+
+**Encouragement:**
+Drawing is a skill that develops with consistent, focused practice. Keep working on {skill_string} through regular exercises like this one. Each drawing you complete builds your understanding and control.
+
+*Note: For detailed visual analysis and specific feedback on your technique, consider working with an art instructor who can provide personalized guidance.*"""
+
+            return jsonify({'feedback': template_feedback}), 200
+
+        except Exception as e:
+            span.record_exception(e)
+            span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+            logger.error(f"Drawing feedback generation failed: {str(e)}")
+            return jsonify({'error': 'Failed to generate drawing feedback'}), 500
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5001))
     app.run(host='0.0.0.0', port=port, debug=os.getenv('FLASK_ENV') == 'development')
