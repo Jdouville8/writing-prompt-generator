@@ -24,7 +24,7 @@ Each module includes:
 
 ---
 
-## 📝 Tab 1: Writing Prompts
+## 📝 Tab 1: Story Studio
 
 Generate AI-powered creative writing exercises tailored to your preferred genres.
 
@@ -62,7 +62,7 @@ Generate AI-powered creative writing exercises tailored to your preferred genres
 
 ---
 
-## 🎹 Tab 2: Sound Design Exercises
+## 🎹 Tab 2: Sound Design Studio
 
 Synthesizer training exercises for electronic music producers, with genre-specific artist references.
 
@@ -102,6 +102,8 @@ oscillators, filters, and effects to recreate
 Skrillex's signature aggressive metallic bass sounds...
 ```
 
+![Technical Exercise Demo](assets/technical-excercise-demo.gif)
+
 ### Example Creative Exercise
 ```
 Title: "Dune" - Desert Atmospheric Texture
@@ -111,12 +113,11 @@ Create a sound that captures the vastness and danger of
 Arrakis. Use reverb and granular synthesis to evoke
 endless desert horizons...
 ```
-![Technical Exercise Demo](assets/technical-excercise-demo.gif)
 
 ![Creative Exercise Demo](assets/creative-excercise-demo.gif)
 ---
 
-## 🎼 Tab 3: Chord Progressions
+## 🎼 Tab 3: Harmony Studio
 
 Generate emotion-driven chord progressions with theoretical explanations and downloadable MIDI files.
 
@@ -160,7 +161,7 @@ Download MIDI → [melancholy_longing.mid]
 
 ---
 
-## ✏️ Tab 4: Drawing Exercises
+## ✏️ Tab 4: Drawing Studio
 
 Generate skill-focused drawing exercises that target fundamental artistic abilities.
 

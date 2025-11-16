@@ -394,6 +394,55 @@ app.post('/api/drawing/generate', async (req, res) => {
   }
 });
 
+// Writing feedback endpoint
+app.post('/api/writing/feedback', async (req, res) => {
+  const span = tracer.startSpan('writing-feedback-generate');
+
+  try {
+    const { exercise, exerciseType, userWriting, genres, difficulty, wordCount } = req.body;
+
+    span.setAttributes({
+      'exercise.type': exerciseType,
+      'genres': JSON.stringify(genres),
+      'difficulty': difficulty,
+      'wordCount.target': wordCount,
+      'wordCount.actual': userWriting.split(/\s+/).filter(w => w.length > 0).length
+    });
+
+    // Call prompt service
+    const promptServiceResponse = await axios.post(
+      'http://prompt-service:5001/generate-writing-feedback',
+      {
+        exercise,
+        exerciseType,
+        userWriting,
+        genres,
+        difficulty,
+        wordCount
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Request-ID': span.spanContext().traceId
+        }
+      }
+    );
+
+    const feedback = promptServiceResponse.data;
+
+    span.setStatus({ code: 1 });
+    res.json(feedback);
+  } catch (error) {
+    span.recordException(error);
+    span.setStatus({ code: 2, message: error.message });
+
+    console.error('Writing feedback generation error:', error);
+    res.status(500).json({ error: 'Failed to generate writing feedback' });
+  } finally {
+    span.end();
+  }
+});
+
 // Get user's prompt history
 app.get('/api/prompts/history', authenticateToken, async (req, res) => {
   const span = tracer.startSpan('get-prompt-history');

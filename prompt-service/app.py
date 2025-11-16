@@ -1924,6 +1924,134 @@ def generate_drawing_exercise_endpoint():
             logger.error(f"Drawing exercise generation failed: {str(e)}")
             return jsonify({'error': 'Failed to generate drawing exercise'}), 500
 
+@app.route('/generate-writing-feedback', methods=['POST'])
+def generate_writing_feedback_endpoint():
+    """Generate AI feedback for a writing exercise submission"""
+    with tracer.start_as_current_span("generate-writing-feedback") as span:
+        try:
+            data = request.json
+            exercise = data.get('exercise', '')
+            exercise_type = data.get('exerciseType', '')
+            user_writing = data.get('userWriting', '')
+            genres = data.get('genres', [])
+            difficulty = data.get('difficulty', '')
+            word_count = data.get('wordCount', 0)
+
+            span.set_attribute("exercise.type", exercise_type)
+            span.set_attribute("genres", str(genres))
+            span.set_attribute("difficulty", difficulty)
+            span.set_attribute("wordCount.target", word_count)
+            span.set_attribute("wordCount.actual", len(user_writing.split()))
+
+            # Validate inputs
+            if not user_writing or not exercise:
+                return jsonify({'error': 'Missing required fields'}), 400
+
+            # Generate feedback using AI
+            if USE_AI:
+                try:
+                    span.add_event("generating-ai-feedback")
+
+                    system_prompt = f"""You are an experienced creative writing instructor providing direct, one-on-one feedback. Address the writer as "you" throughout—speak to them directly, as if you're sitting across from them reviewing their work together.
+
+The writer completed this exercise:
+{exercise}
+
+Exercise Type: {exercise_type}
+Genres: {', '.join(genres)}
+Difficulty: {difficulty}
+Target Word Count: {word_count} words
+
+Provide critical but encouraging feedback covering:
+
+1. **What Works**: Identify 1-2 genuine strengths in their writing. Be specific—quote or reference exact moments. Don't praise generically or find positives where there aren't any. If the writing is weak overall, note any small bright spots but be honest about the overall level.
+
+2. **Critical Issues**: Identify the 2-3 most significant problems holding this piece back. Be direct and specific:
+   - What exactly isn't working? (weak verb choices, unclear sentences, cliché descriptions, etc.)
+   - Why is it a problem? (undermines tension, confuses the reader, tells instead of shows, etc.)
+   - Give concrete examples from their writing
+
+3. **Genre & Exercise Execution**: Did they actually do what was asked? Be honest:
+   - Are genre conventions present or just superficially applied?
+   - Did they engage with the core challenge of the exercise or avoid it?
+   - What did they miss or misunderstand?
+
+4. **Craft Analysis**: Assess the technical writing:
+   - Prose clarity and style
+   - Sentence variety and rhythm
+   - Show vs. tell balance
+   - Dialogue authenticity (if applicable)
+   - Pacing and structure
+
+   Be specific. Point to patterns. Don't sugarcoat weak craft.
+
+5. **Priority Revisions**: What are the 1-2 most important things for them to fix first? Be direct about what will make the biggest difference.
+
+CRITICAL APPROACH:
+- Address the writer as "you" - this is direct feedback to them
+- Be honest. If something doesn't work, say so clearly
+- Support criticism with specific evidence from their writing
+- Recognize effort, but focus on results
+- Don't inflate praise—writers grow from truth, not false encouragement
+- End with genuine belief in their potential IF they apply the feedback
+- Use a mentor's voice: firm, honest, but invested in their growth"""
+
+                    user_prompt = f"Here is my writing for you to review:\n\n{user_writing}"
+
+                    response = openai.ChatCompletion.create(
+                        model="gpt-3.5-turbo",
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        temperature=0.7,
+                        max_tokens=800
+                    )
+
+                    feedback = response.choices[0].message.content.strip()
+
+                    span.set_attribute("feedback.length", len(feedback))
+                    return jsonify({'feedback': feedback}), 200
+
+                except Exception as ai_error:
+                    logger.error(f"AI feedback generation failed: {str(ai_error)}")
+                    # Fall through to template feedback
+
+            # Template fallback feedback
+            actual_word_count = len(user_writing.split())
+            word_count_feedback = ""
+            if actual_word_count >= word_count:
+                word_count_feedback = f"Great job meeting the {word_count} word target!"
+            else:
+                word_count_feedback = f"You wrote {actual_word_count} words. Consider expanding to reach the {word_count} word goal."
+
+            template_feedback = f"""**Feedback on your {exercise_type}**
+
+**Strengths:**
+• You completed the writing exercise and engaged with the prompt
+• Your work shows effort in addressing the {', '.join(genres)} genre(s)
+• {word_count_feedback}
+
+**Areas for Development:**
+• Consider deepening your exploration of the genre conventions
+• Review the exercise requirements to ensure all aspects are fully addressed
+• Focus on refining your prose and strengthening your narrative voice
+
+**Next Steps:**
+• Revise with the exercise goals in mind
+• Read examples in the {', '.join(genres)} genre(s) to study craft techniques
+• Consider sharing your work for peer feedback
+
+Keep writing and developing your craft!"""
+
+            return jsonify({'feedback': template_feedback}), 200
+
+        except Exception as e:
+            span.record_exception(e)
+            span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+            logger.error(f"Writing feedback generation failed: {str(e)}")
+            return jsonify({'error': 'Failed to generate writing feedback'}), 500
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5001))
     app.run(host='0.0.0.0', port=port, debug=os.getenv('FLASK_ENV') == 'development')

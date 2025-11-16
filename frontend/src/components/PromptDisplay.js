@@ -5,6 +5,9 @@ const PromptDisplay = ({ prompt, genres }) => {
   const { isDarkMode } = useTheme();
   const [writingText, setWritingText] = useState('');
   const [wordCount, setWordCount] = useState(0);
+  const [feedback, setFeedback] = useState(null);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackError, setFeedbackError] = useState(null);
   const textareaRef = useRef(null);
 
   useEffect(() => {
@@ -77,6 +80,41 @@ const PromptDisplay = ({ prompt, genres }) => {
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
+  };
+
+  const handleSubmitForFeedback = async () => {
+    setFeedbackLoading(true);
+    setFeedbackError(null);
+    setFeedback(null);
+
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/writing/feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          exercise: prompt.content,
+          exerciseType: prompt.title,
+          userWriting: writingText,
+          genres: genres,
+          difficulty: prompt.difficulty,
+          wordCount: prompt.wordCount
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get feedback');
+      }
+
+      const data = await response.json();
+      setFeedback(data.feedback);
+    } catch (error) {
+      console.error('Feedback generation failed:', error);
+      setFeedbackError(error.message);
+    } finally {
+      setFeedbackLoading(false);
+    }
   };
 
   return (
@@ -171,6 +209,60 @@ const PromptDisplay = ({ prompt, genres }) => {
               ) : (
                 <span>{prompt.wordCount - wordCount} words to go</span>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Submit for Feedback Button */}
+        <div className="mt-6">
+          <button
+            onClick={handleSubmitForFeedback}
+            disabled={wordCount < prompt.wordCount || feedbackLoading}
+            className={`w-full py-3 px-6 rounded-lg font-semibold transition-all duration-200 ${
+              wordCount >= prompt.wordCount && !feedbackLoading
+                ? isDarkMode
+                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer'
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer'
+                : isDarkMode
+                  ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            {feedbackLoading ? (
+              <span className="flex items-center justify-center">
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Getting Feedback...
+              </span>
+            ) : (
+              '📝 Submit for AI Feedback'
+            )}
+          </button>
+          {wordCount < prompt.wordCount && (
+            <p className={`mt-2 text-sm text-center ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+              Complete at least {prompt.wordCount} words to submit
+            </p>
+          )}
+        </div>
+
+        {/* Feedback Display */}
+        {feedbackError && (
+          <div className="mt-6 p-4 bg-red-100 dark:bg-red-900 rounded-lg">
+            <p className="text-red-800 dark:text-red-200">
+              Error getting feedback: {feedbackError}
+            </p>
+          </div>
+        )}
+
+        {feedback && (
+          <div className={`mt-6 p-6 rounded-lg ${isDarkMode ? 'bg-gradient-to-br from-indigo-900 to-purple-900' : 'bg-gradient-to-br from-indigo-50 to-purple-50'}`}>
+            <h4 className={`text-xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              ✨ AI Feedback
+            </h4>
+            <div className={`leading-relaxed whitespace-pre-wrap ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+              {feedback}
             </div>
           </div>
         )}
