@@ -132,7 +132,6 @@ prometheus_data/
 grafana_data/
 
 # Database
-*.sql
 *.sqlite
 *.sqlite3
 *.db

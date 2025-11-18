@@ -334,10 +334,13 @@ REDIS_URL=redis://redis:6379
 2. Create a new project or select an existing one
 3. Enable the **Google+ API**
 4. Navigate to **Credentials** → **Create Credentials** → **OAuth 2.0 Client ID**
-5. Configure authorized redirect URIs:
+5. Add authorized JavaScript origins:
+     - `http://localhost:3000`
+     - `http://localhost:4000`
+6. Configure authorized redirect URIs:
    - `http://localhost:4000/api/auth/google/callback`
    - `http://localhost:3000`
-6. Copy your **Client ID** and **Client Secret** to `.env`
+7. Copy your **Client ID** and **Client Secret** to `.env`
 
 #### 4. Get OpenAI API Key
 
@@ -363,14 +366,8 @@ docker-compose down
 #### 6. Initialize the Database
 
 ```bash
-# macOS/Linux/Git Bash (Windows):
+# Run the database setup script
 bash scripts/setup-db.sh
-
-# Windows Command Prompt:
-scripts\setup-db.bat
-
-# Windows PowerShell:
-.\scripts\setup-db.ps1
 ```
 
 #### 7. Access the Application
